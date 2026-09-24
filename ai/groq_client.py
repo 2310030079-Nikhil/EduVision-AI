@@ -131,13 +131,24 @@ class GroqClientManager:
                 return err_gen()
             return err
         except groq.RateLimitError:
-            err = "Rate Limit Reached: Groq API limit reached. Please wait a few seconds or try a lighter model (e.g., llama-3.1-8b-instant)."
+            err = "Rate Limit Reached: Groq API limit reached. Please wait a few seconds or try a lighter model."
             if stream:
                 def err_gen(): yield err
                 return err_gen()
             return err
         except Exception as exc:
-            err = f"AI Generation Error: {str(exc)}"
+            err_str = str(exc)
+            # Automatic fallback if model is decommissioned or not accessible
+            if ("model_not_found" in err_str or "model_decommissioned" in err_str) and model != "qwen/qwen3.8-27b":
+                print(f"[Notice] Model '{model}' not found or decommissioned. Auto-falling back to 'qwen/qwen3.8-27b'...")
+                return self.generate_chat_response(
+                    messages=messages,
+                    model="qwen/qwen3.8-27b",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=stream,
+                )
+            err = f"AI Generation Error: {err_str}"
             if stream:
                 def err_gen(): yield err
                 return err_gen()
@@ -156,7 +167,7 @@ class GroqClientManager:
         if not self.is_configured():
             return (
                 "⚠️ **Groq API Key Required for Vision**\n\n"
-                "Please configure your Groq API key in Settings to analyze images with `llama-3.2-11b-vision-preview`."
+                "Please configure your Groq API key in Settings to analyze images."
             )
 
         try:
@@ -173,4 +184,13 @@ class GroqClientManager:
         except groq.RateLimitError:
             return "Rate Limit Error: Vision model request limit reached. Please retry in a few moments."
         except Exception as exc:
-            return f"Vision Model Error: {str(exc)}"
+            err_str = str(exc)
+            if ("model_not_found" in err_str or "model_decommissioned" in err_str) and model != "qwen/qwen3.8-27b":
+                print(f"[Notice] Vision model '{model}' unavailable. Auto-falling back to 'qwen/qwen3.8-27b'...")
+                return self.generate_vision_response(
+                    messages=messages,
+                    model="qwen/qwen3.8-27b",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            return f"Vision Model Error: {err_str}"

@@ -26,18 +26,19 @@ DEFAULT_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # Supported Groq Models
 TEXT_MODELS = [
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
 ]
-DEFAULT_TEXT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_TEXT_MODEL = "qwen/qwen3.8-27b"
 
 VISION_MODELS = [
+    "qwen/qwen3.8-27b",
     "llama-3.2-11b-vision-preview",
-    "llama-3.2-90b-vision-preview",
 ]
-DEFAULT_VISION_MODEL = "llama-3.2-11b-vision-preview"
+DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b"
 
 # Embedding Configuration
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
