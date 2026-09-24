@@ -1,0 +1,29 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Secrets & Environment variables
+.env
+*.env.local
+
+# Streamlit runtime data
+.streamlit/
+*.log
+
+# Vector store disk dumps (if generated locally)
+data/vector_store/*.faiss
+data/vector_store/*.npy
+data/vector_store/*.pkl
+
+# OS files
+.DS_Store
+Thumbs.db

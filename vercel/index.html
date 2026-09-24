@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduVision AI — Multimodal RAG Learning Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --primary-light: #EFF6FF;
+            --secondary: #7C3AED;
+            --text-dark: #0F172A;
+            --text-muted: #64748B;
+            --border: #E2E8F0;
+            --bg-light: #F8FAFC;
+            --card-bg: #FFFFFF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding: 16px 24px;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text-dark);
+        }
+
+        .brand-icon {
+            font-size: 1.8rem;
+        }
+
+        .brand-name {
+            font-size: 1.3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-tagline {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #FFFFFF;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            border-color: var(--border);
+            background: #FFFFFF;
+            color: var(--text-dark);
+        }
+
+        .btn-outline:hover {
+            background: var(--bg-light);
+            border-color: #CBD5E1;
+        }
+
+        .hero {
+            max-width: 1200px;
+            margin: 48px auto;
+            padding: 0 24px;
+            text-align: center;
+        }
+
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border: 1px solid #BFDBFE;
+            padding: 4px 14px;
+            border-radius: 9999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            margin-bottom: 18px;
+            color: var(--text-dark);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 720px;
+            margin: 0 auto 32px auto;
+        }
+
+        .grid {
+            max-width: 1200px;
+            margin: 0 auto 60px auto;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 28px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 14px;
+        }
+
+        .card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-dark);
+        }
+
+        .card p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .arch-section {
+            max-width: 1200px;
+            margin: 0 auto 80px auto;
+            padding: 36px 24px;
+            background: #FFFFFF;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+
+        .arch-section h2 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: var(--text-dark);
+        }
+
+        .code-box {
+            background: #0F172A;
+            color: #F8FAFC;
+            padding: 18px;
+            border-radius: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            margin-top: 16px;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 24px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            background: #FFFFFF;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="#" class="brand">
+                <span class="brand-icon">🎓</span>
+                <div>
+                    <div class="brand-name">EduVision AI</div>
+                    <div class="brand-tagline">Learn smarter from your documents, images, and questions.</div>
+                </div>
+            </a>
+            <div class="nav-actions">
+                <a href="/api/health" class="btn btn-outline" target="_blank">⚡ API Status</a>
+                <a href="https://github.com" class="btn btn-outline" target="_blank">💻 GitHub</a>
+                <a href="#launch" class="btn btn-primary">🚀 Launch App</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="badge-pill">
+                <span>⚡ Powered by Groq LPU & FAISS Vector DB</span>
+            </div>
+            <h1>Multimodal RAG Learning Assistant</h1>
+            <p>
+                Experience context-aware education. Ask complex questions, upload lecture PDFs, 
+                inspect verified source citations, evaluate diagrams with Groq Vision, and compute with safe tools.
+            </p>
+            <div style="display: flex; justify-content: center; gap: 14px;">
+                <a href="#launch" class="btn btn-primary" style="font-size: 1rem; padding: 12px 28px;">
+                    Launch Interactive Streamlit App →
+                </a>
+                <a href="#architecture" class="btn btn-outline" style="font-size: 1rem; padding: 12px 24px;">
+                    View Architecture
+                </a>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <div class="card-icon">📚</div>
+                <h3>Grounded RAG Pipeline</h3>
+                <p>
+                    Intelligent document text extraction, recursive semantic chunking, 
+                    SentenceTransformer embeddings, and FAISS similarity retrieval with strict page-level citations.
+                </p>
+            </div>
+            <div class="card">
+                <div class="card-icon">👁️</div>
+                <h3>Multimodal Vision</h3>
+                <p>
+                    Analyzes math problems, handwritten notes, diagrams, and programming screenshots 
+                    using Groq's <code>llama-3.2-11b-vision-preview</code> model.
+                </p>
+            </div>
+            <div class="card">
+                <div class="card-icon">🔧</div>
+                <h3>Safe Tool Calling</h3>
+                <p>
+                    AST-parsed secure calculator eliminating arbitrary execution risks, 
+                    alongside automated DuckDuckGo web search integration.
+                </p>
+            </div>
+            <div class="card">
+                <div class="card-icon">🧠</div>
+                <h3>Educational Styling</h3>
+                <p>
+                    Dynamically adapts response formatting into Explanation, Key Points, 
+                    Step-by-Step Math, Code Complexity, and Grounded Evidence.
+                </p>
+            </div>
+        </section>
+
+        <section class="arch-section" id="architecture">
+            <h2>🏗️ Technical & Deployment Architecture</h2>
+            <p style="color: var(--text-muted); margin-bottom: 16px;">
+                Why Streamlit + Vercel? Streamlit applications require a stateful persistent WebSocket server 
+                for bidirectional state reactivity, whereas Vercel provides high-speed Serverless Edge distribution. 
+                EduVision AI unites both:
+            </p>
+            <div class="code-box">
+User Browser ──────────► Vercel Edge Portal (Static & Serverless API Routes)
+     │
+     └─────────────────► Streamlit Runtime (FAISS Vector Store, Groq LPU API, Session State)
+                               │
+                               ├─► Groq LPU (llama-3.3-70b-versatile, llama-3.2-11b-vision)
+                               ├─► FAISS / SentenceTransformers (Document Chunk Retrieval)
+                               └─► Safe AST Calculator & Web Search Tools
+            </div>
+        </section>
+
+        <section class="arch-section" id="launch" style="text-align: center;">
+            <h2>🚀 Live Interactive Deployment</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Connect to the live Streamlit application with complete interactive Multimodal RAG capabilities.
+            </p>
+            <a href="http://localhost:8501" class="btn btn-primary" style="font-size: 1.1rem; padding: 14px 32px;" target="_blank">
+                Open Full EduVision AI Streamlit Workspace ↗
+            </a>
+        </section>
+    </main>
+
+    <footer>
+        <p>EduVision AI © 2026 • Multimodal RAG Learning Assistant • Built with Python, Streamlit, and Groq</p>
+    </footer>
+</body>
+</html>
