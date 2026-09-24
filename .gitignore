@@ -16,7 +16,8 @@ ENV/
 *.env.local
 
 # Streamlit runtime data
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 *.log
 
 # Vector store disk dumps (if generated locally)
