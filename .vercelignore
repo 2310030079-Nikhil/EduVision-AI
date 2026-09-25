@@ -1,0 +1,17 @@
+# Ignore local vector store and cache data
+data/
+data/sample_documents/
+data/vector_store/
+
+# Ignore test files and test caches
+tests/
+.pytest_cache/
+__pycache__/
+
+# Ignore local environment variables and virtual environments
+.env
+.env.local
+.venv/
+env/
+venv/
+*.log
