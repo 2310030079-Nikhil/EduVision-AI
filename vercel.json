@@ -5,7 +5,7 @@
       "src": "vercel/api/index.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": "tools/**"
+        "includeFiles": "{tools/**,ai/**,utils/**}"
       }
     },
     {
