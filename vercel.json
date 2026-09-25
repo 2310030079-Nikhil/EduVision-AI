@@ -2,25 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "vercel/api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": "{tools/**,ai/**,utils/**}"
-      }
+      "src": "api/index.py",
+      "use": "@vercel/python"
     },
     {
-      "src": "vercel/index.html",
+      "src": "index.html",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "vercel/api/index.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
-      "dest": "vercel/index.html"
+      "dest": "index.html"
     }
   ]
 }
