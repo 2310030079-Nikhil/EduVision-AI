@@ -6,6 +6,15 @@ Safe Tool Calling, and a modern AI SaaS user interface.
 """
 
 import streamlit as st
+
+# Streamlit Page Setup (Must be first Streamlit command)
+st.set_page_config(
+    page_title="EduVision AI — Multimodal RAG Assistant",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
 import os
 from pathlib import Path
 from PIL import Image
@@ -40,14 +49,6 @@ from ai.prompts import build_rag_prompt
 from components.chat_ui import render_chat_messages
 from components.document_ui import render_knowledge_base_ui
 from components.source_display import render_sources
-
-# Streamlit Page Setup
-st.set_page_config(
-    page_title=f"{APP_NAME} — Multimodal RAG Assistant",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 # Custom Styling for AI SaaS Polish
 st.markdown(
