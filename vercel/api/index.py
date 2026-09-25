@@ -7,32 +7,77 @@ Runs natively on Vercel Edge / Serverless infrastructure.
 from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
+import urllib.request
+import urllib.error
 import os
 import sys
 from pathlib import Path
 
-# Add project root to sys.path so project modules can be imported
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.append(str(ROOT_DIR))
+# Add project root and candidate directories to sys.path so modules import reliably anywhere
+CURRENT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = CURRENT_DIR.parent.parent
+for path_item in [CURRENT_DIR, CURRENT_DIR.parent, ROOT_DIR, Path('/var/task')]:
+    if path_item.exists() and str(path_item) not in sys.path:
+        sys.path.insert(0, str(path_item))
 
-# Attempt imports for modules
+# Attempt imports for local tools
 try:
     from tools.calculator import calculate_expression, is_math_query
-except ImportError:
+except Exception:
     calculate_expression = None
     is_math_query = lambda q: (False, "")
 
 try:
     from tools.web_search import search_web, is_search_query
-except ImportError:
+except Exception:
     search_web = None
     is_search_query = lambda q: (False, "")
 
 try:
     from ai.groq_client import GroqClientManager
-except ImportError:
+except Exception:
     GroqClientManager = None
+
+
+def call_groq_direct(messages, model="llama-3.3-70b-versatile", api_key="", temperature=0.3, max_tokens=2048):
+    """Direct HTTP fallback for Groq API using standard library urllib."""
+    key = (api_key or os.getenv("GROQ_API_KEY", "")).strip()
+    if not key:
+        return (
+            "⚠️ **Groq API Key Not Configured**\n\n"
+            "Please enter your free Groq API key in the **Settings** panel above.\n"
+            "You can get a free key instantly at [console.groq.com](https://console.groq.com/keys).\n\n"
+            "*(Local endpoints like the Safe AST Calculator and Web Search are fully working!)*"
+        )
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "User-Agent": "EduVision-AI/1.0"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"]
+    except urllib.error.HTTPError as err:
+        body = err.read().decode("utf-8") if err.fp else ""
+        return f"Groq API Error ({err.code}): {body or err.reason}"
+    except Exception as exc:
+        return f"API Request Exception: {str(exc)}"
 
 
 class handler(BaseHTTPRequestHandler):
@@ -53,66 +98,69 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         """Handle GET requests."""
-        parsed_url = urllib.parse.urlparse(self.path)
-        path = parsed_url.path
+        try:
+            parsed_url = urllib.parse.urlparse(self.path)
+            path = parsed_url.path
 
-        if path.endswith("/health") or path == "/api/health" or path == "/api":
-            api_key = os.getenv("GROQ_API_KEY", "")
+            if path.endswith("/health") or path == "/api/health" or path == "/api":
+                api_key = os.getenv("GROQ_API_KEY", "")
+                self._send_json_response({
+                    "status": "healthy",
+                    "service": "EduVision AI Serverless API",
+                    "version": "1.0.0",
+                    "groq_configured": bool(api_key and len(api_key.strip()) > 0),
+                    "endpoints": [
+                        {"path": "/api/health", "method": "GET"},
+                        {"path": "/api/calculate?expr=15%25+of+87500", "method": "GET"},
+                        {"path": "/api/search?q=quantum+computing", "method": "GET"},
+                        {"path": "/api/chat", "method": "POST"},
+                        {"path": "/api/vision", "method": "POST"},
+                    ],
+                })
+                return
+
+            if "/calculate" in path:
+                params = urllib.parse.parse_qs(parsed_url.query)
+                expr = params.get("expr", [""])[0]
+                if not expr:
+                    self._send_json_response({"error": "Missing 'expr' query parameter."}, 200)
+                    return
+
+                if calculate_expression:
+                    res = calculate_expression(expr)
+                    self._send_json_response(res)
+                else:
+                    self._send_json_response({"error": "Calculator module not loaded."}, 200)
+                return
+
+            if "/search" in path:
+                params = urllib.parse.parse_qs(parsed_url.query)
+                query = params.get("q", [""])[0]
+                if not query:
+                    self._send_json_response({"error": "Missing 'q' query parameter."}, 200)
+                    return
+
+                if search_web:
+                    res = search_web(query)
+                    self._send_json_response(res)
+                else:
+                    self._send_json_response({"error": "Web search module not loaded."}, 200)
+                return
+
+            # Default info
             self._send_json_response({
-                "status": "healthy",
-                "service": "EduVision AI Serverless API",
-                "version": "1.0.0",
-                "groq_configured": bool(api_key and len(api_key.strip()) > 0),
-                "endpoints": [
-                    {"path": "/api/health", "method": "GET"},
-                    {"path": "/api/calculate?expr=15%25+of+87500", "method": "GET"},
-                    {"path": "/api/search?q=quantum+computing", "method": "GET"},
-                    {"path": "/api/chat", "method": "POST"},
-                    {"path": "/api/vision", "method": "POST"},
-                ],
+                "message": "EduVision AI Serverless API Gateway is operational.",
+                "documentation": "Full interactive web workspace running directly on Vercel.",
             })
-            return
-
-        if "/calculate" in path:
-            params = urllib.parse.parse_qs(parsed_url.query)
-            expr = params.get("expr", [""])[0]
-            if not expr:
-                self._send_json_response({"error": "Missing 'expr' query parameter."}, 400)
-                return
-
-            if calculate_expression:
-                res = calculate_expression(expr)
-                self._send_json_response(res)
-            else:
-                self._send_json_response({"error": "Calculator module not loaded."}, 500)
-            return
-
-        if "/search" in path:
-            params = urllib.parse.parse_qs(parsed_url.query)
-            query = params.get("q", [""])[0]
-            if not query:
-                self._send_json_response({"error": "Missing 'q' query parameter."}, 400)
-                return
-
-            if search_web:
-                res = search_web(query)
-                self._send_json_response(res)
-            else:
-                self._send_json_response({"error": "Web search module not loaded."}, 500)
-            return
-
-        # Default info
-        self._send_json_response({
-            "message": "EduVision AI Serverless API Gateway is operational.",
-            "documentation": "Full interactive web workspace running directly on Vercel.",
-        })
+        except Exception as exc:
+            self._send_json_response({"error": f"GET Handler Error: {str(exc)}"}, 200)
 
     def do_POST(self):
         """Handle POST requests for chat, vision, calculation, or search."""
-        parsed_url = urllib.parse.urlparse(self.path)
-        path = parsed_url.path
-
         try:
+            parsed_url = urllib.parse.urlparse(self.path)
+            path = parsed_url.path
+
             content_length = int(self.headers.get("Content-Length", 0))
             body_bytes = self.rfile.read(content_length)
             body = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
@@ -124,7 +172,7 @@ class handler(BaseHTTPRequestHandler):
                     res = calculate_expression(expr)
                     self._send_json_response(res)
                 else:
-                    self._send_json_response({"error": "Invalid calculation payload."}, 400)
+                    self._send_json_response({"error": "Invalid calculation payload."}, 200)
                 return
 
             # Handle /api/search
@@ -134,7 +182,7 @@ class handler(BaseHTTPRequestHandler):
                     res = search_web(query)
                     self._send_json_response(res)
                 else:
-                    self._send_json_response({"error": "Invalid search payload."}, 400)
+                    self._send_json_response({"error": "Invalid search payload."}, 200)
                 return
 
             # Handle /api/vision
@@ -143,23 +191,10 @@ class handler(BaseHTTPRequestHandler):
                 prompt = body.get("prompt", "Analyze this educational image, diagram, or problem in detail.")
                 model = body.get("model", "llama-3.2-11b-vision-preview")
 
-                if not GroqClientManager:
-                    self._send_json_response({"error": "Groq client library not available."}, 500)
-                    return
-
-                groq_mgr = GroqClientManager(api_key=user_api_key)
-                if not groq_mgr.is_configured():
-                    self._send_json_response({"error": "Groq API key is not configured. Please enter a valid key in Settings."}, 400)
-                    return
-
                 image_url = body.get("image_url", "")
                 image_b64 = body.get("image_b64", "")
-
                 if not image_url and image_b64:
-                    if not image_b64.startswith("data:"):
-                        image_url = f"data:image/jpeg;base64,{image_b64}"
-                    else:
-                        image_url = image_b64
+                    image_url = image_b64 if image_b64.startswith("data:") else f"data:image/jpeg;base64,{image_b64}"
 
                 messages = [
                     {
@@ -171,7 +206,14 @@ class handler(BaseHTTPRequestHandler):
                     }
                 ]
 
-                answer = groq_mgr.generate_vision_response(messages=messages, model=model)
+                if GroqClientManager:
+                    groq_mgr = GroqClientManager(api_key=user_api_key)
+                    if groq_mgr.is_configured():
+                        answer = groq_mgr.generate_vision_response(messages=messages, model=model)
+                        self._send_json_response({"success": True, "answer": answer, "model": model})
+                        return
+
+                answer = call_groq_direct(messages, model=model, api_key=user_api_key)
                 self._send_json_response({"success": True, "answer": answer, "model": model})
                 return
 
@@ -186,7 +228,7 @@ class handler(BaseHTTPRequestHandler):
                     messages = [{"role": "user", "content": body["prompt"]}]
 
                 if not messages:
-                    self._send_json_response({"error": "No messages provided."}, 400)
+                    self._send_json_response({"error": "No messages provided."}, 200)
                     return
 
                 # Check latest user message for automatic tool calling
@@ -223,35 +265,23 @@ class handler(BaseHTTPRequestHandler):
                     f"Selected Response Format Style: {style}.\n"
                     "Structure your answer clearly with Markdown headings, bullet points, and clean syntax."
                 )
-
                 if tool_context:
                     system_instruction += tool_context
 
                 groq_messages.append({"role": "system", "content": system_instruction})
-
                 for m in messages:
                     groq_messages.append({"role": m.get("role", "user"), "content": m.get("content", "")})
 
-                if not GroqClientManager:
-                    self._send_json_response({"error": "Groq client library not available."}, 500)
-                    return
+                # Call Groq via ClientManager or Direct Fallback
+                answer = ""
+                if GroqClientManager:
+                    groq_mgr = GroqClientManager(api_key=user_api_key)
+                    if groq_mgr.is_configured():
+                        answer = groq_mgr.generate_chat_response(messages=groq_messages, model=model, stream=False)
 
-                groq_mgr = GroqClientManager(api_key=user_api_key)
-                if not groq_mgr.is_configured():
-                    self._send_json_response({
-                        "success": False,
-                        "answer": (
-                            "⚠️ **Groq API Key Not Configured**\n\n"
-                            "Please enter your free Groq API key in the **Settings** panel above.\n"
-                            "You can get a free key instantly at [console.groq.com](https://console.groq.com/keys).\n\n"
-                            "*(Local endpoints like the Safe AST Calculator and Web Search are fully working!)*"
-                        ),
-                        "tool_used": tool_used,
-                        "tool_data": tool_data,
-                    })
-                    return
+                if not answer:
+                    answer = call_groq_direct(messages=groq_messages, model=model, api_key=user_api_key)
 
-                answer = groq_mgr.generate_chat_response(messages=groq_messages, model=model, stream=False)
                 self._send_json_response({
                     "success": True,
                     "answer": answer,
@@ -263,5 +293,6 @@ class handler(BaseHTTPRequestHandler):
 
             self._send_json_response({"status": "received", "body": body})
         except Exception as exc:
-            self._send_json_response({"error": str(exc)}, 500)
+            self._send_json_response({"error": f"Server error: {str(exc)}"}, 200)
+500)
 

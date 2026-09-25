@@ -629,12 +629,21 @@
             return localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile';
         }
 
+        async function parseResponseJson(res) {
+            const text = await res.text();
+            try {
+                return JSON.parse(text);
+            } catch (err) {
+                return { error: 'Server message: ' + (text ? text.substring(0, 150) : 'No response content.') };
+            }
+        }
+
         // Check Health Status
         async function checkApiHealth() {
             const badge = document.getElementById('api-status-badge');
             try {
                 const res = await fetch('/api/health');
-                const data = await res.json();
+                const data = await parseResponseJson(res);
                 if (data.status === 'healthy') {
                     badge.innerText = '🟢 API Operational';
                     badge.style.background = '#ECFDF5';
@@ -695,7 +704,7 @@
                     })
                 });
 
-                const data = await res.json();
+                const data = await parseResponseJson(res);
                 sendBtn.disabled = false;
 
                 if (data.answer) {
@@ -711,7 +720,7 @@
 
                     chatMessages.push({ role: 'assistant', content: data.answer });
                 } else if (data.error) {
-                    assistantBubble.innerHTML = `<span style="color: #DC2626;">Error: ${data.error}</span>`;
+                    assistantBubble.innerHTML = `<span style="color: #DC2626;">${data.error}</span>`;
                 }
             } catch (err) {
                 sendBtn.disabled = false;
@@ -739,7 +748,7 @@
                     body: JSON.stringify({ expression: expr })
                 });
 
-                const data = await res.json();
+                const data = await parseResponseJson(res);
                 btn.disabled = false;
                 resultEl.innerText = JSON.stringify(data, null, 2);
             } catch (err) {
@@ -761,7 +770,7 @@
 
             try {
                 const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-                const data = await res.json();
+                const data = await parseResponseJson(res);
                 btn.disabled = false;
                 resultEl.innerText = JSON.stringify(data, null, 2);
             } catch (err) {
@@ -798,7 +807,7 @@
                     })
                 });
 
-                const data = await res.json();
+                const data = await parseResponseJson(res);
                 btn.disabled = false;
                 if (data.answer) {
                     resultEl.innerHTML = typeof marked !== 'undefined' ? marked.parse(data.answer) : data.answer;
