@@ -39,7 +39,7 @@ except Exception:
     GroqClientManager = None
 
 
-def call_groq_direct(messages, model="llama-3.3-70b-versatile", api_key="", temperature=0.3, max_tokens=2048):
+def call_groq_direct(messages, model="qwen/qwen3.8-27b", api_key="", temperature=0.3, max_tokens=2048):
     """Direct HTTP fallback for Groq API using standard library urllib."""
     key = (api_key or os.getenv("GROQ_API_KEY", "")).strip()
     if not key:
@@ -75,6 +75,8 @@ def call_groq_direct(messages, model="llama-3.3-70b-versatile", api_key="", temp
             return data["choices"][0]["message"]["content"]
     except urllib.error.HTTPError as err:
         body = err.read().decode("utf-8") if err.fp else ""
+        if ("model_not_found" in body or err.code == 404) and model != "qwen/qwen3.8-27b":
+            return call_groq_direct(messages, model="qwen/qwen3.8-27b", api_key=api_key, temperature=temperature, max_tokens=max_tokens)
         return f"Groq API Error ({err.code}): {body or err.reason}"
     except Exception as exc:
         return f"API Request Exception: {str(exc)}"
@@ -220,7 +222,7 @@ class handler(BaseHTTPRequestHandler):
             # Handle /api/chat
             if "/chat" in path or "messages" in body or "prompt" in body:
                 user_api_key = body.get("api_key") or os.getenv("GROQ_API_KEY", "")
-                model = body.get("model", "llama-3.3-70b-versatile")
+                model = body.get("model", "qwen/qwen3.8-27b")
                 style = body.get("style", "Standard Explanation")
                 messages = body.get("messages", [])
 

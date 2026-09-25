@@ -464,7 +464,7 @@
                         <div class="chat-header">
                             <div>
                                 <strong>Interactive Assistant</strong>
-                                <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;" id="current-model-display">Model: llama-3.3-70b-versatile</span>
+                                <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;" id="current-model-display">Model: qwen/qwen3.8-27b</span>
                             </div>
                             <select id="style-select" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.85rem;">
                                 <option value="Standard Explanation">Standard Explanation</option>
@@ -562,10 +562,11 @@
                     <div class="form-group">
                         <label class="form-label">Default LLM Text Model:</label>
                         <select class="form-control" id="model-select">
-                            <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Recommended)</option>
-                            <option value="llama-3.2-11b-vision-preview">llama-3.2-11b-vision-preview</option>
+                            <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b (Recommended)</option>
                             <option value="llama3-70b-8192">llama3-70b-8192</option>
+                            <option value="llama3-8b-8192">llama3-8b-8192</option>
                             <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
+                            <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
                         </select>
                     </div>
 
@@ -598,7 +599,7 @@
         // Initialize Settings
         document.addEventListener('DOMContentLoaded', () => {
             const savedKey = localStorage.getItem('groq_api_key') || '';
-            const savedModel = localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile';
+            const savedModel = localStorage.getItem('groq_model') || 'qwen/qwen3.8-27b';
             
             if (savedKey) document.getElementById('groq-api-key-input').value = savedKey;
             document.getElementById('model-select').value = savedModel;
@@ -626,7 +627,7 @@
         }
 
         function getModel() {
-            return localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile';
+            return localStorage.getItem('groq_model') || 'qwen/qwen3.8-27b';
         }
 
         async function parseResponseJson(res) {
