@@ -68,3 +68,34 @@ def test_math_query_detection():
 
     is_m, _ = is_math_query("What is the capital of France?")
     assert is_m is False
+
+    # Prevent false positives on document queries and natural language
+    is_m, _ = is_math_query("What is the bias-variance tradeoff according to the uploaded Machine Learning document?")
+    assert is_m is False
+
+    is_m, _ = is_math_query("Explain the difference between Supervised and Unsupervised Learning with examples.")
+    assert is_m is False
+
+    is_m, _ = is_math_query("What is logistic regression?")
+    assert is_m is False
+
+    is_m, _ = is_math_query("What is cosine similarity?")
+    assert is_m is False
+
+    is_m, _ = is_math_query("What is 3-tier architecture?")
+    assert is_m is False
+
+    is_m, _ = is_math_query("What is machine-learning?")
+    assert is_m is False
+
+    is_m, _ = is_math_query("What is a trade-off in software design?")
+    assert is_m is False
+
+    # Valid math variations
+    assert is_math_query("Compute sqrt(144) + 10")[0] is True
+    assert is_math_query("What is 2 + 2?")[0] is True
+    assert is_math_query("15% of 87,500")[0] is True
+    assert is_math_query("(10 - 4) * 2")[0] is True
+    assert is_math_query("sin(pi / 2)")[0] is True
+    assert is_math_query("What is 10 / 0?")[0] is True
+    assert is_math_query("What is 42?")[0] is False

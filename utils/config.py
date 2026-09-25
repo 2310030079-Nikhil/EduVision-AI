@@ -29,14 +29,11 @@ TEXT_MODELS = [
     "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
 ]
 DEFAULT_TEXT_MODEL = "qwen/qwen3.8-27b"
 
 VISION_MODELS = [
     "qwen/qwen3.8-27b",
-    "llama-3.2-11b-vision-preview",
 ]
 DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b"
 

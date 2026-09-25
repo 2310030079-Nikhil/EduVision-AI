@@ -179,30 +179,87 @@ def is_math_query(query: str) -> Tuple[bool, str]:
     """
     Detect if the user query contains an explicit calculation or math expression.
     Returns (is_math, extracted_expression).
+    Prevents false positives on natural language questions (e.g. definitions, document queries).
     """
     q = query.strip()
-    
-    # Check for direct calculation triggers
+    if not q:
+        return False, ""
+
+    candidate = ""
+
+    # 1. Check for calculation prefixes
     calc_prefixes = [
-        r'^(?:calculate|compute|solve|what is|evaluate)\s+(.+)$',
+        r'^(?:can you\s+)?(?:please\s+)?(?:calculate|compute|solve|evaluate)\s+(.+)$',
         r'^(?:how much is)\s+(.+)$',
+        r'^(?:what is)\s+(.+)$',
     ]
     for prefix in calc_prefixes:
         match = re.match(prefix, q, re.IGNORECASE)
         if match:
             candidate = match.group(1).rstrip("?.").strip()
-            # Verify candidate looks like an expression (numbers and operators or math words)
-            if re.search(r'[\d\+\-\*\/\%\^]', candidate) or any(fn in candidate.lower() for fn in ["sqrt", "sin", "cos", "log"]):
-                return True, candidate
+            break
 
-    # Check for percentage pattern: "15% of 87,500"
-    if re.search(r'[\d\.]+\s*(?:%|percent)\s+of\s+[\d,]+', q, re.IGNORECASE):
-        pct_expr = re.search(r'[\d\.]+\s*(?:%|percent)\s+of\s+[\d,]+(?:\.\d+)?', q, re.IGNORECASE).group(0)
-        return True, pct_expr
+    # 2. Check for percentage pattern if no prefix matched: e.g. "15% of 87,500"
+    if not candidate:
+        pct_match = re.search(r'[\d\.]+\s*(?:%|percent)\s+of\s+[\d,]+(?:\.\d+)?', q, re.IGNORECASE)
+        if pct_match and len(q.split()) <= 6:
+            candidate = pct_match.group(0)
 
-    # Check if string is almost entirely a mathematical expression (e.g. "(12 * 45) / 3")
-    stripped = re.sub(r'[\s\d\+\-\*\/\(\)\.\,\%\^\=]', '', q)
-    if len(stripped) == 0 and any(op in q for op in "+-*/%^"):
-        return True, q
+    # 3. Check if raw query looks like a standalone math expression (e.g. "(10 - 4) * 2", "2^3")
+    if not candidate:
+        candidate = q.rstrip("?.").strip()
 
-    return False, ""
+    if not candidate:
+        return False, ""
+
+    # Whitelist of allowed word tokens in mathematical expressions
+    allowed_math_words = {
+        k.lower() for k in list(SafeMathEvaluator.ALLOWED_FUNCTIONS.keys()) + list(SafeMathEvaluator.ALLOWED_CONSTANTS.keys())
+    } | {"of", "percent", "percentage"}
+
+    # Extract all alphabetic word tokens
+    words = re.findall(r'[a-zA-Z_]+', candidate)
+
+    # If there are no words and no digits, it cannot be a calculation
+    if not words and not re.search(r'\d', candidate):
+        return False, ""
+
+    # If ANY word in the candidate is NOT in the allowed math words whitelist,
+    # it is natural language (e.g. "bias", "variance", "tradeoff", "machine", "learning", "document", "logistic")
+    if any(w.lower() not in allowed_math_words for w in words):
+        return False, ""
+
+    # Must contain at least one digit or recognized math function
+    has_digit = bool(re.search(r'\d', candidate))
+    has_func = any(w.lower() in SafeMathEvaluator.ALLOWED_FUNCTIONS for w in words)
+    if not (has_digit or has_func):
+        return False, ""
+
+    # Must contain at least one math operator, function, or percentage phrase
+    has_operator = any(op in candidate for op in ['+', '-', '*', '/', '^', '%'])
+    has_pct = bool(re.search(r'(?:%|percent)\s+of', candidate, re.IGNORECASE))
+    if not (has_operator or has_func or has_pct):
+        return False, ""
+
+    # Normalize expression for AST syntax verification
+    norm = candidate.replace("^", "**")
+    norm = re.sub(r'(\d+),(\d+)', r'\1\2', norm)
+    pct_m = re.search(r'([\d\.]+)\s*(?:%|percent)\s+of\s+([\d,]+(?:\.\d+)?)', norm, re.IGNORECASE)
+    if pct_m:
+        pct = float(pct_m.group(1))
+        val = float(pct_m.group(2).replace(",", ""))
+        norm = f"({pct}/100)*{val}"
+    norm = re.sub(r'([\d\.]+)%', r'(\1/100)', norm)
+
+    try:
+        tree = ast.parse(norm, mode="eval")
+        # Ensure only allowed node types and valid identifiers exist
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                if node.id not in SafeMathEvaluator.ALLOWED_CONSTANTS and node.id not in SafeMathEvaluator.ALLOWED_FUNCTIONS:
+                    return False, ""
+            elif isinstance(node, (ast.Import, ast.ImportFrom, ast.Attribute, ast.Lambda)):
+                return False, ""
+        return True, candidate
+    except Exception:
+        return False, ""

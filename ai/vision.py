@@ -3,12 +3,39 @@ Vision processing and multimodal message formatting for EduVision AI.
 Handles image encoding and payload preparation for Groq vision models.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import base64
 from PIL import Image
 import io
 from utils.config import DEFAULT_VISION_MODEL
 from ai.prompts import SYSTEM_PROMPT, build_vision_prompt
+
+
+def optimize_image_for_vision(
+    image_bytes: bytes,
+    max_dimension: int = 1024,
+    quality: int = 85,
+) -> Tuple[bytes, str]:
+    """
+    Downscale and compress images to prevent Groq API rate limits and reduce token overhead.
+    Converts RGBA/PNG to clean optimized JPEG while preserving visual clarity.
+    """
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        w, h = img.size
+        if max(w, h) > max_dimension:
+            scale = max_dimension / max(w, h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="JPEG", quality=quality, optimize=True)
+        return out_buf.getvalue(), "image/jpeg"
+    except Exception:
+        return image_bytes, "image/jpeg"
 
 
 def prepare_image_payload(
@@ -18,9 +45,11 @@ def prepare_image_payload(
 ) -> List[Dict[str, Any]]:
     """
     Format image and text prompt into a Groq multimodal message payload.
+    Automatically compresses and optimizes visual content to avoid rate limit spikes.
     """
-    b64_image = base64.b64encode(image_bytes).decode("utf-8")
-    data_uri = f"data:{mime_type};base64,{b64_image}"
+    opt_bytes, opt_mime = optimize_image_for_vision(image_bytes)
+    b64_image = base64.b64encode(opt_bytes).decode("utf-8")
+    data_uri = f"data:{opt_mime};base64,{b64_image}"
     prompt_text = build_vision_prompt(user_prompt)
 
     return [

@@ -54,13 +54,25 @@ groq_mgr = st.session_state.groq_client
 
 st.markdown("## 💬 Chat with EduVision AI")
 
+if "image_uploader_key" not in st.session_state:
+    st.session_state.image_uploader_key = 0
+
 # Optional Image Attachment Drawer
 with st.expander("🖼️ Attach Image for Multimodal Vision Analysis (Optional)", expanded=False):
-    uploaded_image = st.file_uploader(
-        "Upload mathematical problem, diagram, chart, or screenshot",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="chat_page_image_uploader",
-    )
+    col_img_up, col_img_btn = st.columns([3, 1])
+    with col_img_up:
+        uploaded_image = st.file_uploader(
+            "Upload mathematical problem, diagram, chart, or screenshot",
+            type=["png", "jpg", "jpeg", "webp"],
+            key=f"chat_page_image_uploader_{st.session_state.image_uploader_key}",
+        )
+    with col_img_btn:
+        if uploaded_image:
+            st.write("")
+            if st.button("🗑️ Discard Image", key="discard_page_img_btn", use_container_width=True):
+                st.session_state.image_uploader_key += 1
+                st.rerun()
+
     if uploaded_image:
         img_bytes = uploaded_image.getvalue()
         v_info = validate_and_process_image(img_bytes)
@@ -73,13 +85,25 @@ with st.expander("🖼️ Attach Image for Multimodal Vision Analysis (Optional)
 render_chat_messages(st.session_state.messages)
 
 user_query = st.chat_input("Ask a question, upload a problem, or ask about your documents...")
+is_from_suggestion = False
+is_visual_prompt = False
 if st.session_state.pending_query:
     user_query = st.session_state.pending_query
+    is_from_suggestion = True
+    is_visual_prompt = "uploaded image" in user_query.lower() or "problem shown" in user_query.lower()
     st.session_state.pending_query = None
 
 if user_query:
-    has_image = bool(uploaded_image)
+    is_doc_explicit = any(term in user_query.lower() for term in [
+        "uploaded document", "uploaded machine learning", "according to the uploaded",
+        "in the document", "from the document", "in the pdf", "from the pdf"
+    ])
+
+    has_image = bool(uploaded_image) and not is_doc_explicit and not (is_from_suggestion and not is_visual_prompt)
     raw_image_bytes = uploaded_image.getvalue() if has_image else None
+
+    if has_image:
+        st.session_state.image_uploader_key += 1
 
     st.session_state.messages.append({
         "role": "user",
@@ -125,16 +149,18 @@ if user_query:
                     prompt_to_llm, model=st.session_state.selected_text_model, temperature=st.session_state.temperature
                 )
             else:
-                explanation = f"Could not calculate: {calc_res['error']}"
-
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": explanation,
-                "mode": "Tool",
-                "tool_data": tool_data,
-                "timestamp": get_current_timestamp(),
-            })
-            st.rerun()
+                err_msg = str(calc_res.get("error", ""))
+                if any(term in err_msg.lower() for term in ["division or modulo by zero", "overflow", "domain error"]):
+                    explanation = f"Could not calculate: {err_msg}"
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": explanation,
+                        "mode": "Tool",
+                        "tool_data": tool_data,
+                        "timestamp": get_current_timestamp(),
+                    })
+                    st.rerun()
+                # Otherwise fall through to Web Search, RAG, and General AI
 
         # Web Search Tool
         is_search, search_term = is_search_query(user_query)

@@ -272,13 +272,26 @@ if st.session_state.active_nav == "💬 Chat":
         unsafe_allow_html=True,
     )
 
+    # Ensure image uploader key exists in session state
+    if "image_uploader_key" not in st.session_state:
+        st.session_state.image_uploader_key = 0
+
     # Optional Image Attachment Drawer
     with st.expander("🖼️ Attach Image for Multimodal Vision Analysis (Optional)", expanded=False):
-        uploaded_image = st.file_uploader(
-            "Upload mathematical problem, diagram, chart, or screenshot (PNG, JPG, WEBP)",
-            type=["png", "jpg", "jpeg", "webp"],
-            key="chat_image_uploader",
-        )
+        col_img_up, col_img_btn = st.columns([3, 1])
+        with col_img_up:
+            uploaded_image = st.file_uploader(
+                "Upload mathematical problem, diagram, chart, or screenshot (PNG, JPG, WEBP)",
+                type=["png", "jpg", "jpeg", "webp"],
+                key=f"chat_image_uploader_{st.session_state.image_uploader_key}",
+            )
+        with col_img_btn:
+            if uploaded_image:
+                st.write("")
+                if st.button("🗑️ Discard Image", key="discard_img_btn", use_container_width=True):
+                    st.session_state.image_uploader_key += 1
+                    st.rerun()
+
         if uploaded_image:
             img_bytes = uploaded_image.getvalue()
             v_info = validate_and_process_image(img_bytes)
@@ -292,14 +305,31 @@ if st.session_state.active_nav == "💬 Chat":
 
     # Handle incoming query from either chat_input or a clicked suggestion prompt
     user_query = st.chat_input("Ask a question, upload a problem, or ask about your documents...")
+    is_from_suggestion = False
+    is_visual_prompt = False
     if st.session_state.pending_query:
         user_query = st.session_state.pending_query
+        is_from_suggestion = True
+        is_visual_prompt = "uploaded image" in user_query.lower() or "problem shown" in user_query.lower()
         st.session_state.pending_query = None
 
     if user_query:
-        # Check if an image is currently uploaded in the file uploader
-        has_image = bool(uploaded_image)
+        # Check if user query explicitly refers to documents
+        is_doc_explicit = any(term in user_query.lower() for term in [
+            "uploaded document", "uploaded machine learning", "according to the uploaded",
+            "in the document", "from the document", "in the pdf", "from the pdf"
+        ])
+
+        # Attach image ONLY if:
+        # 1. An image is uploaded
+        # 2. Query is NOT an explicit document query
+        # 3. If query is from suggestion prompts, it MUST be the visual prompt
+        has_image = bool(uploaded_image) and not is_doc_explicit and not (is_from_suggestion and not is_visual_prompt)
         raw_image_bytes = uploaded_image.getvalue() if has_image else None
+
+        # Reset uploader once an image is submitted so it doesn't linger for future turns
+        if has_image:
+            st.session_state.image_uploader_key += 1
 
         # 1. Append User Message
         user_msg = {
@@ -369,16 +399,18 @@ if st.session_state.active_nav == "💬 Chat":
                         stream=False,
                     )
                 else:
-                    explanation = f"Could not compute calculation: {calc_res['error']}"
-
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": explanation,
-                    "mode": "Tool",
-                    "tool_data": tool_data,
-                    "timestamp": get_current_timestamp(),
-                })
-                st.rerun()
+                    err_msg = str(calc_res.get("error", ""))
+                    if any(term in err_msg.lower() for term in ["division or modulo by zero", "overflow", "domain error"]):
+                        explanation = f"Could not compute calculation: {err_msg}"
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": explanation,
+                            "mode": "Tool",
+                            "tool_data": tool_data,
+                            "timestamp": get_current_timestamp(),
+                        })
+                        st.rerun()
+                    # If not a math runtime error, fall through to Web Search, RAG, or General AI
 
             # Mode C: Web Search Tool (Search query detected)
             is_search, search_term = is_search_query(user_query)

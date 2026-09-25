@@ -131,7 +131,19 @@ class GroqClientManager:
                 return err_gen()
             return err
         except groq.RateLimitError:
-            err = "Rate Limit Reached: Groq API limit reached. Please wait a few seconds or try a lighter model."
+            # Automatic fallback to fast lightweight text model if main model hits rate limit
+            if model != "openai/gpt-oss-20b":
+                print(f"[Notice] Rate limit hit for model '{model}'. Retrying with 'openai/gpt-oss-20b'...")
+                import time
+                time.sleep(1.5)
+                return self.generate_chat_response(
+                    messages=messages,
+                    model="openai/gpt-oss-20b",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=stream,
+                )
+            err = "Rate Limit Reached: Groq API limit reached. Please wait a few seconds before sending another request."
             if stream:
                 def err_gen(): yield err
                 return err_gen()
@@ -160,37 +172,85 @@ class GroqClientManager:
         model: str = DEFAULT_VISION_MODEL,
         temperature: float = 0.2,
         max_tokens: int = 2048,
+        retries: int = 2,
     ) -> str:
         """
         Send multimodal vision messages (text + image) to Groq vision model.
+        Includes automatic retry with backoff and graceful conceptual fallback on rate limits.
         """
+        import time
+
         if not self.is_configured():
             return (
                 "⚠️ **Groq API Key Required for Vision**\n\n"
                 "Please configure your Groq API key in Settings to analyze images."
             )
 
-        try:
-            resp = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return resp.choices[0].message.content or "No response received from vision model."
-
-        except groq.AuthenticationError:
-            return "Authentication Error: Invalid Groq API key. Please check your credentials in Settings."
-        except groq.RateLimitError:
-            return "Rate Limit Error: Vision model request limit reached. Please retry in a few moments."
-        except Exception as exc:
-            err_str = str(exc)
-            if ("model_not_found" in err_str or "model_decommissioned" in err_str) and model != "qwen/qwen3.8-27b":
-                print(f"[Notice] Vision model '{model}' unavailable. Auto-falling back to 'qwen/qwen3.8-27b'...")
-                return self.generate_vision_response(
+        for attempt in range(retries + 1):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=model,
                     messages=messages,
-                    model="qwen/qwen3.8-27b",
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
-            return f"Vision Model Error: {err_str}"
+                return resp.choices[0].message.content or "No response received from vision model."
+
+            except groq.AuthenticationError:
+                return "Authentication Error: Invalid Groq API key. Please check your credentials in Settings."
+            except groq.RateLimitError as rle:
+                if attempt < retries:
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+
+                # If vision rate limits persist after retries, provide intelligent conceptual fallback
+                user_text = ""
+                for m in messages:
+                    if m.get("role") == "user":
+                        c = m.get("content")
+                        if isinstance(c, list):
+                            for part in c:
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    user_text = part.get("text", "")
+                        elif isinstance(c, str):
+                            user_text = c
+
+                if user_text:
+                    try:
+                        fallback_prompt = [
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"The user prompt is: '{user_text}'.\n"
+                                    f"Please provide a clear, structured educational explanation addressing this topic."
+                                ),
+                            }
+                        ]
+                        text_resp = self.generate_chat_response(
+                            messages=fallback_prompt,
+                            model="openai/gpt-oss-20b",
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            stream=False,
+                        )
+                        return (
+                            "⚠️ *Notice: Direct visual analysis is temporarily rate-limited by the Groq API. "
+                            "Here is an AI educational response addressing your prompt:*\n\n"
+                            + str(text_resp)
+                        )
+                    except Exception:
+                        pass
+
+                return "Rate Limit Error: Vision model request limit reached. Please retry in a few moments."
+            except Exception as exc:
+                err_str = str(exc)
+                if ("model_not_found" in err_str or "model_decommissioned" in err_str) and model != "qwen/qwen3.8-27b":
+                    print(f"[Notice] Vision model '{model}' unavailable. Auto-falling back to 'qwen/qwen3.8-27b'...")
+                    return self.generate_vision_response(
+                        messages=messages,
+                        model="qwen/qwen3.8-27b",
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        retries=retries,
+                    )
+                return f"Vision Model Error: {err_str}"
